@@ -239,6 +239,85 @@ const makeFeatures = () => {
       features.hexagons.push(newHex)
     }
   }
+
+  //  Work out the distortion for the main line
+  features.lineDistortion = []
+  for (let i = 0; i < 5; i++) {
+    const distortions = []
+    for (let j = 0; j < 200; j++) {
+      distortions.push(fxrand())
+    }
+    features.lineDistortion.push(distortions)
+  }
+
+  // Now we position all the planets
+  features.planetPositions = []
+  features.planetCount = Math.floor(fxrand() * 6) + 1
+  features.maxPlanetRadius = 0
+  const escapeLimit = 200
+  while (features.planetPositions.length < features.planetCount) {
+    let overLap = true
+    let radius = null
+    let position = null
+    let exitCounter = 0
+    while (overLap && exitCounter < escapeLimit) {
+      radius = fxrand() * 0.333 + 0.05
+      position = fxrand()
+      //  Check to see if it overlaps with any other planet
+      overLap = false
+      for (const planet of features.planetPositions) {
+        if (position + radius > planet.position - planet.radius && position - radius < planet.position + planet.radius) overLap = true
+      }
+      exitCounter++
+    }
+    const newPlanet = {
+      position,
+      radius,
+      exitCounter,
+      offsets: [],
+      rings: [],
+      moons: []
+    }
+    //  Work out if we have any moons, and if so, how many
+    let maxMoons = 0
+    if (fxrand() < 0.25) {
+      maxMoons = 1
+      const moonChance = fxrand()
+      if (moonChance < 0.333) maxMoons = 2
+      if (moonChance < 0.1) maxMoons = 3
+
+      const moonOrbits = [0, 0.33, 0.66, 1]
+      //  Shuffle the moonOrbit array
+      for (let i = moonOrbits.length - 1; i > 0; i--) {
+        const j = Math.floor(fxrand() * (i + 1))
+        const temp = moonOrbits[i]
+        moonOrbits[i] = moonOrbits[j]
+        moonOrbits[j] = temp
+      }
+      //  Loop through the number of moons we have
+      for (let m = 0; m < maxMoons; m++) {
+        const moonOrbit = moonOrbits.pop()
+        newPlanet.moons.push(moonOrbit)
+      }
+    }
+    //  Work out if we have any rings around this planet
+    let maxRings = 0
+    if (fxrand() < 0.4) maxRings = Math.floor(fxrand() * 5) + 1
+    maxRings -= maxMoons
+    for (let ring = 0; ring < maxRings; ring++) {
+      newPlanet.rings.push(fxrand(0))
+    }
+
+    features.planetPositions.push(newPlanet)
+    if (radius > features.maxPlanetRadius) {
+      features.maxPlanetRadius = radius
+    }
+  }
+  features.planetPositions = features.planetPositions.filter(planet => planet.exitCounter < escapeLimit).map(planet => {
+    planet.radius *= 0.95
+    return planet
+  })
+
   console.log('features:')
   console.table(features)
 }
@@ -320,6 +399,9 @@ const drawCanvas = async () => {
   ctx.fillStyle = '#EEE'
   ctx.fillRect(0, 0, w, h)
 
+  //  Set up our protective circles
+  const protectiveCircles = []
+
   const scale = h / (features.hexes + 1)
   const hexShrink = 0.4
   const fineAdjust = 0.134
@@ -358,6 +440,14 @@ const drawCanvas = async () => {
           if (row === 5) x += scale * fineAdjust * 2
         }
 
+        if (features.hexagons[hexIndex].glyph.length) {
+          protectiveCircles.push({
+            x,
+            y,
+            radius: hexSize * scale + w / 100
+          })
+        }
+
         for (const line of features.hexagons[hexIndex].glyph) {
           const newLine = []
           const px = line.points[0].x * (scale * hexSize) + x
@@ -379,22 +469,223 @@ const drawCanvas = async () => {
         }
       }
     }
+  }
 
-    //  Draw the messageLines
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-
-    ctx.lineWidth = w / 400
-    ctx.strokeStyle = '#000'
-    for (const line of messageLines) {
-      console.log(line)
-      ctx.beginPath()
-      ctx.moveTo(line[0].x, line[0].y)
-      for (let p = 1; p < line.length; p++) {
-        ctx.lineTo(line[p].x, line[p].y)
-      }
-      ctx.stroke()
+  //  Draw the line that the planets run down
+  const gridLines = []
+  const lineLength = h - (scale * 2)
+  const lineTop = scale
+  //  Now we are going to draw the lines with all the distortions
+  for (let i = 0; i < 5; i++) {
+    const newLine = []
+    newLine.push({
+      x: w / 2,
+      y: lineTop
+    })
+    for (let percent = 0; percent <= 1; percent += 1 / 200) {
+      const x = w / 2 + (w / 1000) * ((fxrand() - 0.5) * 2)
+      const y = lineTop + lineLength * percent
+      newLine.push({
+        x,
+        y
+      })
     }
+    gridLines.push(newLine)
+  }
+
+  const planetLine = lineLength - features.maxPlanetRadius * 2 * lineLength
+  const planetTop = lineTop + features.maxPlanetRadius * lineLength
+
+  //  Draw the planets
+  const planetDivision = 200
+  const planetLines = []
+  for (const planet of features.planetPositions) {
+    const planetRadius = Math.floor(planet.radius * planetLine / (h / planetDivision)) * (h / planetDivision) - (h / (planetDivision * 2))
+    const planetX = w / 2
+    const planetY = planetTop + planet.position * planetLine
+
+    protectiveCircles.push({
+      x: planetX,
+      y: planetY,
+      radius: planetRadius + w / 50
+    })
+
+    //  Now draw the lines
+    for (let y = planetY - planetRadius; y <= planetY + planetRadius; y += h / planetDivision) {
+      const planetPoints = []
+      const drawWidth = Math.sqrt(planetRadius * planetRadius - (y - planetY) * (y - planetY))
+      planetPoints.push({
+        x: planetX - drawWidth,
+        y: y - (w / 3000) * ((fxrand() - 0.5) * 2)
+      })
+      for (let x = planetX - drawWidth + w / planetDivision; x <= planetX + drawWidth; x += w / (planetDivision * 2)) {
+        planetPoints.push({
+          x,
+          y: y - (w / 3000) * ((fxrand() - 0.5) * 2)
+        })
+      }
+      planetLines.push(planetPoints)
+    }
+  }
+
+  //  Work out the moons around the planets
+  ctx.lineWidth = w / 400
+  const moonLines = []
+  for (const planet of features.planetPositions) {
+    for (const moon of planet.moons) {
+      //  The position of the moon is somewhere between the right edge of the planet radius
+      //  and the alien writing on the right
+      const planetRadius = Math.floor(planet.radius * planetLine / (h / planetDivision)) * (h / planetDivision) - (h / (planetDivision * 2))
+      const planetX = w / 2
+      const planetY = planetTop + planet.position * planetLine
+
+      const moonLeft = planetX + planetRadius + (w / 20)
+      const moonRight = w - (scale * 2.5)
+      const moonX = ((moonRight - moonLeft) * moon) + moonLeft
+      //  Calculate the radius for the ring now and add it to the rings.
+      //  Mark is as a negative number so we know it's precalulated
+      const ringRadius = moonX - planetX
+      planet.rings.push(-ringRadius)
+
+      let moonRadius = w / 80
+      if (fxrand() < 0.8 && moon > 0 && moon < 1) moonRadius *= (fxrand() + 0.8)
+      protectiveCircles.push({
+        x: moonX,
+        y: planetY,
+        radius: moonRadius + w / 200
+      })
+
+      const moonLine = []
+      //  Calculate the points by rotating the points around the middle
+      for (let i = 0; i <= 360; i += 1) {
+        const tinyOffset = (w / 1000) * ((fxrand() - 0.5) * 2)
+        const x = moonX + Math.cos(i * Math.PI / 180) * (moonRadius + tinyOffset)
+        const y = planetY + Math.sin(i * Math.PI / 180) * (moonRadius + tinyOffset)
+        moonLine.push({
+          x,
+          y
+        })
+      }
+      moonLines.push(moonLine)
+    }
+  }
+
+  //  Work out the rings around the planets
+  const orbitLines = []
+  //  Do the whole thing three times
+  for (let i = 0; i < 3; i++) {
+    for (const planet of features.planetPositions) {
+      for (const ring of planet.rings) {
+        let ringRadius = (((ring * ((planet.radius * 6) - planet.radius)) + planet.radius) * planetLine) + w / 45
+        //  If it's precaculated (as marked with a negative value, then ust use it)
+        if (ring < 0) ringRadius = -ring
+        const ringX = w / 2
+        const ringY = planetTop + planet.position * planetLine
+
+        //  Now calculate the points of a circle based on that ringRadius
+        let started = false
+        let thisLine = []
+        for (let i = 0; i <= 360; i += 1) {
+          const tinyOffset = (w / 1000) * ((fxrand() - 0.5) * 2)
+          const x = ringX + Math.cos(i * Math.PI / 180) * (ringRadius + tinyOffset)
+          const y = ringY + Math.sin(i * Math.PI / 180) * (ringRadius + tinyOffset)
+          //  Loop through all the protected circles and see if we are inside one
+          let insideCircle = false
+          for (const circle of protectiveCircles) {
+            if (Math.sqrt((x - circle.x) * (x - circle.x) + (y - circle.y) * (y - circle.y)) < circle.radius) {
+              insideCircle = true
+              break
+            }
+          }
+          //  Nwo also check we aren't at the edges of the canvas
+          if (x < w / 130) insideCircle = true
+          if (x > w - (w / 130)) insideCircle = true
+          if (y < w / 130) insideCircle = true
+          if (y > h - (w / 130)) insideCircle = true
+
+          //  If we aren't inside a circle, add the point to the line
+          if (!insideCircle) {
+            thisLine.push({
+              x,
+              y
+            })
+            if (!started) started = true
+          } else {
+            //  If we are inside a circle, add the line to the orbitLines and start a new line
+            if (started) {
+              if (thisLine.length) orbitLines.push(thisLine)
+              thisLine = []
+              started = false
+            }
+          }
+        }
+        //  If we have a line left over, add it to the orbitLines
+        if (thisLine.length) orbitLines.push(thisLine)
+      }
+    }
+  }
+  //  This is where we draw all the things
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  //  Draw the messageLines
+  ctx.lineWidth = w / 400
+  ctx.strokeStyle = '#000'
+  for (const line of messageLines) {
+    ctx.beginPath()
+    ctx.moveTo(line[0].x, line[0].y)
+    for (let p = 1; p < line.length; p++) {
+      ctx.lineTo(line[p].x, line[p].y)
+    }
+    ctx.stroke()
+  }
+
+  //  Draw the gridLines
+  ctx.lineWidth = w / 400
+  ctx.strokeStyle = '#000'
+  for (const line of gridLines) {
+    ctx.beginPath()
+    ctx.moveTo(line[0].x, line[0].y)
+    for (let p = 1; p < line.length; p++) {
+      ctx.lineTo(line[p].x, line[p].y)
+    }
+    ctx.stroke()
+  }
+
+  //  Draw the planetLines
+  ctx.lineWidth = w / 400
+  ctx.strokeStyle = '#000'
+  for (const line of planetLines) {
+    ctx.beginPath()
+    ctx.moveTo(line[0].x, line[0].y)
+    for (let p = 1; p < line.length; p++) {
+      ctx.lineTo(line[p].x, line[p].y)
+    }
+    ctx.stroke()
+  }
+
+  //  Draw the moonLines
+  ctx.lineWidth = w / 400
+  ctx.strokeStyle = '#C00'
+  for (const line of moonLines) {
+    ctx.beginPath()
+    ctx.moveTo(line[0].x, line[0].y)
+    for (let p = 1; p < line.length; p++) {
+      ctx.lineTo(line[p].x, line[p].y)
+    }
+    ctx.stroke()
+  }
+
+  //  Draw the orbitLines
+  ctx.lineWidth = w / 400
+  ctx.strokeStyle = '#000'
+  for (const line of orbitLines) {
+    ctx.beginPath()
+    ctx.moveTo(line[0].x, line[0].y)
+    for (let p = 1; p < line.length; p++) {
+      ctx.lineTo(line[p].x, line[p].y)
+    }
+    ctx.stroke()
   }
 
   //  Now do it all over again
