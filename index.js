@@ -316,17 +316,16 @@ const drawCanvas = async () => {
   const w = canvas.width
   const h = canvas.height
 
+  //  Draw the background
   ctx.fillStyle = '#EEE'
   ctx.fillRect(0, 0, w, h)
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
 
-  ctx.lineWidth = w / 400
-  ctx.strokeStyle = '#000'
   const scale = h / (features.hexes + 1)
   const hexShrink = 0.4
   const fineAdjust = 0.134
 
+  //  Record all the lines used to make the messages
+  const messageLines = []
   let hexIndex = -1
   for (let row = 1; row <= 6; row++) {
     for (let hex = 0; hex < features.hexes; hex++) {
@@ -360,14 +359,41 @@ const drawCanvas = async () => {
         }
 
         for (const line of features.hexagons[hexIndex].glyph) {
-          ctx.beginPath()
-          ctx.moveTo(line.points[0].x * (scale * hexSize) + x, line.points[0].y * (scale * hexSize) + y)
+          const newLine = []
+          const px = line.points[0].x * (scale * hexSize) + x
+          const py = line.points[0].y * (scale * hexSize) + y
+          newLine.push({
+            x: px,
+            y: py
+          })
           for (let p = 1; p < line.points.length; p++) {
-            ctx.lineTo(line.points[p].x * (scale * hexSize) + x, line.points[p].y * (scale * hexSize) + y)
+            const px = line.points[p].x * (scale * hexSize) + x
+            const py = line.points[p].y * (scale * hexSize) + y
+            newLine.push({
+              x: px,
+              y: py
+            })
           }
-          ctx.stroke()
+          messageLines.push(newLine)
+          // ctx.stroke()
         }
       }
+    }
+
+    //  Draw the messageLines
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+
+    ctx.lineWidth = w / 400
+    ctx.strokeStyle = '#000'
+    for (const line of messageLines) {
+      console.log(line)
+      ctx.beginPath()
+      ctx.moveTo(line[0].x, line[0].y)
+      for (let p = 1; p < line.length; p++) {
+        ctx.lineTo(line[p].x, line[p].y)
+      }
+      ctx.stroke()
     }
   }
 
