@@ -1,0 +1,22 @@
+{
+  "name": "map",
+  "version": "1.0.0",
+  "description": "The third piece in the Concord trilogy",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://revdancatt@github.com/revdancatt/map.git"
+  },
+  "author": "revdancatt",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/revdancatt/map/issues"
+  },
+  "homepage": "https://github.com/revdancatt/map#readme",
+  "devDependencies": {
+    "standard": "^17.0.0"
+  }
+}
