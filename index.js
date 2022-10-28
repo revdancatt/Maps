@@ -1,4 +1,4 @@
-/* global imagesLoaded fxhash fxrand page Line */
+/* global imagesLoaded fxhash fxrand page Line Blob */
 
 //
 //  fxhash - Map
@@ -318,6 +318,71 @@ const makeFeatures = () => {
     return planet
   })
 
+  features.palette = {
+    Black: '#000000',
+    Green: '#ECF3EB',
+    Blue: '#EEF5F5',
+    Pink: '#F3EAF3',
+    Parchment: '#F5C976',
+    'Off White': '#EEEEEE',
+    White: '#FFFFFF'
+  }
+
+  features.linePalette = {
+    Black: '#000000',
+    Ink: '#3D1D12',
+    Wash: '#605A5C',
+    'Off White': '#EEEEEE'
+  }
+
+  features.dotPalette = {
+    Red: '#D72A0C',
+    'Bright Red': '#FF0000',
+    Yellow: '#F5C976'
+  }
+
+  const backgroundColour = fxrand()
+  features.backgroundColour = 'Black'
+  if (backgroundColour < 0.95) features.backgroundColour = 'Special'
+  if (backgroundColour < 0.90) features.backgroundColour = 'Green'
+  if (backgroundColour < 0.81) features.backgroundColour = 'Blue'
+  if (backgroundColour < 0.72) features.backgroundColour = 'Pink'
+  if (backgroundColour < 0.63) features.backgroundColour = 'Parchment'
+  if (backgroundColour < 0.52) features.backgroundColour = 'Off White'
+  if (backgroundColour < 0.32) features.backgroundColour = 'White'
+
+  const convertToWash = fxrand()
+
+  const lineColour = fxrand()
+  features.lineColour = 'Black'
+  if (lineColour < 0.40) features.lineColour = 'Ink'
+  if (lineColour < 0.20) features.lineColour = 'Wash'
+  if (features.backgroundColour === 'Black') {
+    features.lineColour = 'Off White'
+    if (convertToWash < 0.25) features.lineColour = 'Wash'
+  }
+  if (features.backgroundColour === 'Parchment' && features.lineColour === 'Wash') {
+    features.lineColour = 'Ink'
+  }
+  if (features.backgroundColour === 'Special') features.lineColour = 'Black'
+
+  const dotColour = fxrand()
+  features.dotColour = 'Red'
+  if (features.backgroundColour === 'Black') {
+    if (features.circleColour === 'Wash') features.dotColour = 'Bright Red'
+    if (dotColour < 0.60) features.dotColour = 'Bright Red'
+    if (dotColour < 0.20) features.dotColour = 'Yellow'
+  }
+
+  if (features.backgroundColour === 'Special') {
+    features.backgroundSpecial = fxrand()
+  }
+  if ((features.backgroundColour === 'Pink' || features.backgroundColour === 'Green' || features.backgroundColour === 'Blue') && fxrand() < 0.33) {
+    features.backgroundColour += ' Gradient'
+  }
+  if (features.backgroundColour === 'Parchment' && fxrand() < 0.25) {
+    features.backgroundColour += ' Gradient'
+  }
   console.log('features:')
   console.table(features)
 }
@@ -360,7 +425,7 @@ const layoutCanvas = async () => {
     canvas.width = 8192 / ratio
   } else {
     canvas.width = Math.min((8192 / 2), cWidth * 2)
-    canvas.height = Math.min((8192 / ratio / 2), cHeight * 2)
+    canvas.height = Math.min((8192 * ratio / 2), cHeight * 2)
     //  Minimum size to be half of the high rez cersion
     if (Math.min(canvas.width, canvas.height) < 8192 / 2) {
       if (canvas.width < canvas.height) {
@@ -396,8 +461,34 @@ const drawCanvas = async () => {
   const h = canvas.height
 
   //  Draw the background
-  ctx.fillStyle = '#EEE'
-  ctx.fillRect(0, 0, w, h)
+  if (features.backgroundColour === 'Special' || features.backgroundColour.includes('Gradient')) {
+    const grd = ctx.createLinearGradient(0, 0, 0, canvas.height)
+    if (features.backgroundColour.includes('Gradient')) {
+      grd.addColorStop(1, features.palette[features.backgroundColour.replace(' Gradient', '')])
+      grd.addColorStop(0, 'white')
+    } else {
+      if (features.backgroundSpecial > 0.75) {
+        grd.addColorStop(1, 'black')
+        grd.addColorStop(0, 'white')
+        window.$fxhashFeatures.Background = '80s'
+      }
+      if (features.backgroundSpecial <= 0.75 && features.backgroundSpecial > 0.25) {
+        grd.addColorStop(1, '#E4904E')
+        grd.addColorStop(0.5, '#D3C7A5')
+        grd.addColorStop(0, '#748D78')
+        window.$fxhashFeatures.Background = 'World on Fire'
+      }
+      if (features.backgroundSpecial <= 0.25) {
+        grd.addColorStop(1, '#91DEF7')
+        grd.addColorStop(0, '#F690EC')
+        window.$fxhashFeatures.Background = 'Summertime'
+      }
+    }
+    ctx.fillStyle = grd
+  } else {
+    ctx.fillStyle = features.palette[features.backgroundColour]
+  }
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
 
   //  Set up our protective circles
   const protectiveCircles = []
@@ -628,9 +719,14 @@ const drawCanvas = async () => {
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
 
+  //  Store the lines to be plotted later
+  features.blackLines = []
+  features.redLines = []
+
   //  Draw the messageLines
   ctx.lineWidth = w / 400
-  ctx.strokeStyle = '#000'
+  ctx.strokeStyle = features.linePalette[features.lineColour]
+
   for (const line of messageLines) {
     ctx.beginPath()
     ctx.moveTo(line[0].x, line[0].y)
@@ -638,11 +734,12 @@ const drawCanvas = async () => {
       ctx.lineTo(line[p].x, line[p].y)
     }
     ctx.stroke()
+    if (line.length > 1) features.blackLines.push(line)
   }
 
   //  Draw the gridLines
   ctx.lineWidth = w / 400
-  ctx.strokeStyle = '#000'
+  ctx.strokeStyle = features.linePalette[features.lineColour]
   for (const line of gridLines) {
     ctx.beginPath()
     ctx.moveTo(line[0].x, line[0].y)
@@ -650,11 +747,12 @@ const drawCanvas = async () => {
       ctx.lineTo(line[p].x, line[p].y)
     }
     ctx.stroke()
+    if (line.length > 1) features.blackLines.push(line)
   }
 
   //  Draw the planetLines
   ctx.lineWidth = w / 400
-  ctx.strokeStyle = '#000'
+  ctx.strokeStyle = features.linePalette[features.lineColour]
   for (const line of planetLines) {
     ctx.beginPath()
     ctx.moveTo(line[0].x, line[0].y)
@@ -662,23 +760,12 @@ const drawCanvas = async () => {
       ctx.lineTo(line[p].x, line[p].y)
     }
     ctx.stroke()
-  }
-
-  //  Draw the moonLines
-  ctx.lineWidth = w / 400
-  ctx.strokeStyle = '#C00'
-  for (const line of moonLines) {
-    ctx.beginPath()
-    ctx.moveTo(line[0].x, line[0].y)
-    for (let p = 1; p < line.length; p++) {
-      ctx.lineTo(line[p].x, line[p].y)
-    }
-    ctx.stroke()
+    if (line.length > 1) features.blackLines.push(line)
   }
 
   //  Draw the orbitLines
   ctx.lineWidth = w / 400
-  ctx.strokeStyle = '#000'
+  ctx.strokeStyle = features.linePalette[features.lineColour]
   for (const line of orbitLines) {
     ctx.beginPath()
     ctx.moveTo(line[0].x, line[0].y)
@@ -686,6 +773,25 @@ const drawCanvas = async () => {
       ctx.lineTo(line[p].x, line[p].y)
     }
     ctx.stroke()
+    if (line.length > 1) features.blackLines.push(line)
+  }
+
+  //  Draw the moonLines
+  ctx.lineWidth = w / 400
+  ctx.strokeStyle = features.dotPalette[features.dotColour]
+  for (const line of moonLines) {
+    ctx.beginPath()
+    ctx.moveTo(line[0].x, line[0].y)
+    for (let p = 1; p < line.length; p++) {
+      ctx.lineTo(line[p].x, line[p].y)
+    }
+    ctx.stroke()
+    if (line.length > 1) features.redLines.push(line)
+  }
+
+  features.canvas = {
+    width: w,
+    height: h
   }
 
   //  Now do it all over again
@@ -708,6 +814,55 @@ const autoDownloadCanvas = async (showHash = false) => {
   document.body.removeChild(element)
 }
 
+const PAPER = { // eslint-disable-line no-unused-vars
+  A1: [59.4, 84.1],
+  A2: [42.0, 59.4],
+  A3: [29.7, 42.0],
+  A4: [21.0, 29.7],
+  A5: [14.8, 21.0],
+  A6: [10.5, 14.8]
+}
+
+const downloadSVG = async size => {
+  await wrapSVG(features.blackLines, PAPER[size], `Maps_blacklines_${size}_${fxhash}`)
+  if (features.redLines.length) await wrapSVG(features.redLines, PAPER[size], `Maps_redlines_${size}_${fxhash}`)
+}
+
+const wrapSVG = async (lines, size, filename) => {
+  let output = `<?xml version="1.0" standalone="no" ?>
+  <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" 
+      "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+      <svg version="1.1" id="lines" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+      x="0" y="0"
+      viewBox="0 0 ${size[0]} ${size[1]}"
+      width="${size[0]}cm"
+      height="${size[1]}cm" 
+      xml:space="preserve">`
+
+  output += `
+      <g>
+      <path d="`
+  lines.forEach(points => {
+    output += `M ${points[0].x / features.canvas.width * size[0]} ${points[0].y / features.canvas.height * size[1]} `
+    for (let p = 1; p < points.length; p++) {
+      output += `L ${points[p].x / features.canvas.width * size[0]} ${points[p].y / features.canvas.height * size[1]} `
+    }
+  })
+  output += `"  fill="none" stroke="black" stroke-width="0.05"/>
+    </g>`
+  output += '</svg>'
+
+  const element = document.createElement('a')
+  element.setAttribute('download', `${filename}.svg`)
+  element.style.display = 'none'
+  document.body.appendChild(element)
+  element.setAttribute('href', window.URL.createObjectURL(new Blob([output], {
+    type: 'text/plain;charset=utf-8'
+  })))
+  element.click()
+  document.body.removeChild(element)
+}
+
 //  KEY PRESSED OF DOOM
 document.addEventListener('keypress', async (e) => {
   e = e || window.event
@@ -724,6 +879,13 @@ document.addEventListener('keypress', async (e) => {
     full = !full
     await layoutCanvas()
   }
+
+  if (e.key === '1') downloadSVG('A1')
+  if (e.key === '2') downloadSVG('A2')
+  if (e.key === '3') downloadSVG('A3')
+  if (e.key === '4') downloadSVG('A4')
+  if (e.key === '5') downloadSVG('A5')
+  if (e.key === '6') downloadSVG('A6')
 })
 //  This preloads the images so we can get access to them
 // eslint-disable-next-line no-unused-vars
