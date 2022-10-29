@@ -254,6 +254,9 @@ const makeFeatures = () => {
   features.planetPositions = []
   features.planetCount = Math.floor(fxrand() * 6) + 1
   features.maxPlanetRadius = 0
+  features.moonCount = 0
+  features.ringCount = 0
+
   const escapeLimit = 200
   while (features.planetPositions.length < features.planetCount) {
     let overLap = true
@@ -298,6 +301,7 @@ const makeFeatures = () => {
       for (let m = 0; m < maxMoons; m++) {
         const moonOrbit = moonOrbits.pop()
         newPlanet.moons.push(moonOrbit)
+        features.moonCount++
       }
     }
     //  Work out if we have any rings around this planet
@@ -306,6 +310,7 @@ const makeFeatures = () => {
     maxRings -= maxMoons
     for (let ring = 0; ring < maxRings; ring++) {
       newPlanet.rings.push(fxrand(0))
+      features.ringCount++
     }
 
     features.planetPositions.push(newPlanet)
@@ -383,13 +388,18 @@ const makeFeatures = () => {
   if (features.backgroundColour === 'Parchment' && fxrand() < 0.25) {
     features.backgroundColour += ' Gradient'
   }
-  console.log('features:')
-  console.table(features)
 }
 
 //  Call the above make features, so we'll have the window.$fxhashFeatures available
 //  for fxhash
 makeFeatures()
+
+window.$fxhashFeatures.Background = features.backgroundColour
+window.$fxhashFeatures['Line colour'] = features.lineColour
+window.$fxhashFeatures.Planets = features.planetPositions.length
+window.$fxhashFeatures.Moons = features.moonCount
+window.$fxhashFeatures.Rings = features.ringCount
+
 console.log('window.$fxhashFeatures:')
 console.table(window.$fxhashFeatures)
 
